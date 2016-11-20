@@ -1,4 +1,6 @@
 .DS_Store
 .dropbox
-"Icon\r"
-\"Icon\r\"
+Icon\r
+data/*
+submission.csv
+.Rproj.user
