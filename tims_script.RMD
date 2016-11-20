@@ -1,0 +1,135 @@
+#   Tim Siwula
+#   https://docs.google.com/document/d/1wjOgT-j9TNjEs1zHis4oPuDpGU3SnQo6uehtbRwml3c/edit?ts=581cd593
+#
+
+
+
+
+
+dim(clicks_train)
+#> dim(clicks_train)
+#[1] 87141731        3
+
+summary(clicks_train)
+#display_id           ad_id           clicked      
+#Min.   :       1   Min.   :     1   Min.   :0.0000  
+#1st Qu.: 4216023   1st Qu.: 97634   1st Qu.:0.0000  
+#Median : 8464243   Median :168386   Median :0.0000  
+#Mean   : 8443768   Mean   :190396   Mean   :0.1936  
+#3rd Qu.:12659669   3rd Qu.:252931   3rd Qu.:0.0000  
+#Max.   :16874593   Max.   :548019   Max.   :1.0000  
+
+#see how many missing values
+sum(is.na(clicks_train))
+#[1] 0
+
+########################### MERGE COLUMNS BY AD_ID ###########################################
+#document_topics = read.csv("data/documents_topics.csv", header = TRUE)
+#in document_topics ------ Join by ad_id, then by document_id.
+```
+
+
+
+
+
+
+promoted_content = read.csv("data/promoted_content.csv")
+dim(document_topics)
+summary(document_topics)
+test_merge = merge(clicks_train, promoted_content, by="ad_id",all=TRUE)
+test_merge
+
+
+
+```
+
+#merge(first_data_set, other_data_set,by=”Name”,all=TRUE)
+
+
+
+
+########################### <------------------> ###########################################
+
+
+
+
+
+
+
+
+
+
+
+
+########################### create a training set ###########################################
+partition_size = floor(0.80 * nrow(clicks_train)) ## 80% of the sample size
+set.seed(123) ## set the seed to make your partition reproductible
+partition_index <- sample(seq_len(nrow(clicks_train)), size = partition_size)
+local_train_set <- clicks_train[partition_index, ]
+local_test_set <- clicks_train[-partition_index, ]
+dim(local_train_set)
+dim(local_test_set)
+########################### <------------------> ###########################################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+library(data.table)
+
+# take care , cant be variables with the same name as var or target in dt... 
+#if you have a beter implamentation of this functions,share it pls ^^
+get_probs <- function (dt,var,target,w){
+  p=dt[,sum(get(target))/.N]
+  dt[ ,.( prob=(sum(get(target))+w*p )/(.N+w) ),by=eval(var)]
+}
+DT_fill_NA <- function(DT,replacement=0) {
+  for (j in seq_len(ncol(DT)))
+    set(DT,which(is.na(DT[[j]])),j,replacement)
+}
+super_fread <- function( file , key_var=NULL){
+  dt <- fread(file)
+  if(!is.null(key_var)) setkeyv(dt,c(key_var))
+  return(dt)
+}
+
+#
+clicks_train  <- super_fread( "data/clicks_train.csv", key_var = "ad_id" )
+
+#
+click_prob = clicks_train[,.(sum(clicked)/.N)]
+ad_id_probs   <- get_probs(clicks_train,"ad_id","clicked",8)
+rm(clicks_train)
+gc()
+
+clicks_test   <- super_fread( "data/clicks_test.csv" , key_var = "ad_id" )
+clicks_test <- merge( clicks_test, ad_id_probs, all.x = T )
+
+DT_fill_NA( clicks_test, click_prob )
+
+setkey(clicks_test,"prob")
+submission <- clicks_test[,.(ad_id=paste(rev(ad_id),collapse=" ")),by=display_id]
+setkey(submission,"display_id")
+
+write.csv(submission,file = "submission.csv",row.names = F)
