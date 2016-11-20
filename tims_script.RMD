@@ -1,8 +1,10 @@
 #   Tim Siwula
 #   https://docs.google.com/document/d/1wjOgT-j9TNjEs1zHis4oPuDpGU3SnQo6uehtbRwml3c/edit?ts=581cd593
 #   https://www.kaggle.com/c/outbrain-click-prediction/data
+#   https://github.com/tcsiwula/click_prediction
 #
-########################### SET UP DATABASE CONNECTION ###########################################
+########################### SET UP DATABASE CONNECTION ################################
+```{R}
 require("RPostgreSQL")    #install.packages("RPostgreSQL")
 driver <- dbDriver("PostgreSQL")   # loads the PostgreSQL driver
 
@@ -11,23 +13,45 @@ driver <- dbDriver("PostgreSQL")   # loads the PostgreSQL driver
 connection <- dbConnect(driver, dbname = "clickprediction",
                  host = "localhost", port = 5432,
                  user = "admin", password = "admin")
-                 
 dbExistsTable(connection, "clicks_train")  # confirm the tables are accessible
+```
+####################################################################################
+
+
+########################### QUERY THE DATABASE ########################################
 queryResults1=dbGetQuery(connection, "select * from clicks_train limit 10")
 queryResults1
 
-########################### QUERY THE DATABASE ###########################################
-queryResults2=dbGetQuery(connection, "select distinct document_id, count(topic_id) over(partition by document_id) from documents_topics limit 100")
+
+queryResults2=dbGetQuery(connection, "select distinct document_id, count(topic_id) over(partition by document_id) from documents_topics limit 10")
 queryResults2
 
 
-queryabc = "SELECT count(*) FROM clicks_train t, promoted_content p, documents_topics d
+queryabc = "select * from clicks_train t, promoted_content p, documents_topics d
+group by 
 where t.ad_id = p.ad_id and p.document_id = d.document_id limit 10;"
 results=dbGetQuery(connection, queryabc)
 results
-########################### <-----------------------> ###########################################
+####################################################################################
 
 
+
+
+
+
+
+
+########################### SORT RESULTS BY PROBABILITY ################################
+
+```{R}
+# sort by probability
+sortByProbabilityQuery = "select click_prob, count(*) as click_prob
+from clicks_train
+order by click_prob desc 
+limit 10;"
+sortedResults=dbGetQuery(connection, sortByProbabilityQuery)
+sortedResults
+```
 
 
 
