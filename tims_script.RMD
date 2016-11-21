@@ -19,6 +19,43 @@ dbExistsTable(connection, "clicks_train")  # confirm the tables are accessible
 
 
 ########################### QUERY THE DATABASE ########################################
+```{R}
+# 1) 
+# try to find features related to ad_id.
+# here we join click_train with promoted-content with ad_id.
+
+# look at clicks_train first
+getClicksTrain="select * from clicks_train limit 10"
+clicks_train = dbGetQuery(connection, getClicksTrain)
+clicks_train
+
+# look at promoted_content next
+getPromotedContent="select * from promoted_content limit 10"
+promoted_content = dbGetQuery(connection, getPromotedContent)
+promoted_content
+
+# merge the tables and look at new table
+join_query = "
+select * 
+from clicks_train t, promoted_content p, documents_topics d
+where t.ad_id = p.ad_id 
+and p.document_id = d.document_id 
+limit 10;"
+click_train_joins_promoted_content=dbGetQuery(connection, join_query)
+click_train_joins_promoted_content
+
+# remove duplicate column "document_id"
+summary(click_train_joins_promoted_content)
+click_train_joins_promoted_content[, document_id := NULL]
+click_train_joins_promoted_content
+summary(click_train_joins_promoted_content)
+
+
+
+
+```
+####################################################################################
+
 queryResults1=dbGetQuery(connection, "select * from clicks_train limit 10")
 queryResults1
 
@@ -32,7 +69,6 @@ group by
 where t.ad_id = p.ad_id and p.document_id = d.document_id limit 10;"
 results=dbGetQuery(connection, queryabc)
 results
-####################################################################################
 
 
 
@@ -74,7 +110,7 @@ summary(clicks_train)
 sum(is.na(clicks_train))
 #[1] 0
 
-########################### MERGE COLUMNS BY AD_ID ###########################################
+########################### MERGE COLUMNS BY AD_ID ####################################
 #document_topics = read.csv("data/documents_topics.csv", header = TRUE)
 #in document_topics ------ Join by ad_id, then by document_id.
 ```
