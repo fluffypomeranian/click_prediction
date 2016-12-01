@@ -1,18 +1,28 @@
+########################### Readme ################################
+#   Author:   Tim Siwula
+#   Proposal: http://bit.ly/2gcCLQ4
+#   Kaggle:   http://bit.ly/2gMVpPG
+#   Github:   http://bit.ly/2gZoTwy
+#
+####################################################################################
+
+########################### Notes ################################
+# clear workspace ----> rm(list = ls())
+#
+####################################################################################
+
+########################### Setup ################################
 ---
 output: pdf_document
 ---
-#   Tim Siwula
-#   https://docs.google.com/document/d/1wjOgT-j9TNjEs1zHis4oPuDpGU3SnQo6uehtbRwml3c/edit?ts=581cd593
-#   https://www.kaggle.com/c/outbrain-click-prediction/data
-#   https://github.com/tcsiwula/click_prediction
-#
-# clear workspace ----> rm(list = ls())
-#
+```{R}
 library(knitr)
 library(markdown)
-
 #transform the .Rmd to a markdown (.md) file.
 knit('tims_script.Rmd')
+```
+####################################################################################
+
 
 ########################### SET UP DATABASE CONNECTION ################################
 ```{R}
@@ -24,7 +34,8 @@ driver <- dbDriver("PostgreSQL")   # loads the PostgreSQL driver
 connection <- dbConnect(driver, dbname = "clickprediction",
                  host = "localhost", port = 5432,
                  user = "admin", password = "admin")
-dbExistsTable(connection, "clicks_train")  # confirm the tables are accessible
+# confirm the tables are accessible
+dbExistsTable(connection, "clicks_train")  
 ```
 ####################################################################################
 
@@ -79,26 +90,20 @@ Start with the classification problem first - easier problem - start with decisi
 Then switch to regression
 ```{r}
 require(tree)
-str(local_train_set)
+str(new_table)
 
 
-hist(local_train_set$confidence_level)
-hist(local_train_set$clicked)
-hist(local_train_set$display_id)
-hist(local_train_set$ad_id)
-hist(local_train_set$document_id)
-hist(local_train_set$topic_id)
-attach(local_train_set)
-confidence20=ifelse(local_train_set$confidence_level>=0.2,"Yes","No")
+hist(new_table$confidence_level)
+hist(new_table$clicked)
+hist(new_table$display_id)
+hist(new_table$ad_id)
+hist(new_table$document_id)
+hist(new_table$topic_id)
+attach(new_table)
+confidence20=ifelse(new_table$confidence_level>=0.2,"Yes","No")
 str(confidence20)
-confidence20
-#hist(confidence20)
-
-local_train_set=data.frame(local_train_set, confidence20)
-
-
-
-tree.local.train.c20=tree(confidence20~.-local_train_set$confidence_level,data=local_train_set)
+new_table=data.frame(new_table, confidence20)
+tree.local.train.c20=tree(confidence20~.-new_table$confidence_level,data=new_table)
 summary(tree.local.train.c20)
 plot(tree.local.train.c20)
 text(tree.local.train.c20,pretty=0)
@@ -107,54 +112,27 @@ text(tree.local.train.c20,pretty=0)
 ##############################################################################
 
 
-Lets create a training and test set (250,150) split of the 400 observations, grow the tree on the training set, and evaluate its performance on the test set.
-```{r}
-set.seed(1011)
-train=sample(1:nrow(local_train_set),250)
-tree.carseats=tree(High~.-Sales,Carseats,subset=train)
-plot(tree.carseats);text(tree.carseats,pretty=0)
-tree.pred=predict(tree.carseats,Carseats[-train,],type="class")
-with(Carseats[-train,],table(tree.pred,High))
-(72+33)/150
+########################### create a training set ###########################################
+```{R}
+# list the structure of mydata
+str(new_table)
+partition_size = floor(0.80 * nrow(new_table)) ## 80% of the sample size
+str(partition_size)
+set.seed(123) ## set the seed to make your partition reproductible
+partition_index <- sample(seq_len(nrow(new_table)), size = partition_size)
+local_train_set <- new_table[partition_index, ]
+local_test_set <- new_table[-partition_index, ]
+
+# list the structure of mydata
+str(local_test_set)
+
+
+
+
+
+
+
+# print first 10 rows of mydata
+#head(mydata, n=10)
 ```
-
-########################### probability calculation #######################################
-library(data.table)
-
-# take care , cant be variables with the same name as var or target in dt... 
-#if you have a beter implamentation of this functions,share it pls ^^
-get_probs <- function (dt,var,target,w){
-  p=dt[,sum(get(target))/.N]
-  dt[ ,.( prob=(sum(get(target))+w*p )/(.N+w) ),by=eval(var)]
-}
-DT_fill_NA <- function(DT,replacement=0) {
-  for (j in seq_len(ncol(DT)))
-    set(DT,which(is.na(DT[[j]])),j,replacement)
-}
-super_fread <- function( file , key_var=NULL){
-  dt <- fread(file)
-  if(!is.null(key_var)) setkeyv(dt,c(key_var))
-  return(dt)
-}
-
-#
-clicks_train  <- super_fread( "data/clicks_train.csv", key_var = "ad_id" )
-
-#
-click_prob = clicks_train[,.(sum(clicked)/.N)]
-ad_id_probs   <- get_probs(clicks_train,"ad_id","clicked",8)
-#dim(ad_id_probs)
-rm(clicks_train)
-gc()
-
-clicks_test   <- super_fread( "data/clicks_test.csv" , key_var = "ad_id" )
-clicks_test <- merge( clicks_test, ad_id_probs, all.x = T )
-
-DT_fill_NA( clicks_test, click_prob )
-
-setkey(clicks_test,"prob")
-submission <- clicks_test[,.(ad_id=paste(rev(ad_id),collapse=" ")),by=display_id]
-setkey(submission,"display_id")
-
-write.csv(submission,file = "submission.csv",row.names = F)
-############################################################################
+##############################################################################
