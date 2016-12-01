@@ -1,31 +1,21 @@
-########################### Readme ################################
-#   Author:   Tim Siwula
-#   Proposal: http://bit.ly/2gcCLQ4
-#   Kaggle:   http://bit.ly/2gMVpPG
-#   Github:   http://bit.ly/2gZoTwy
+########################### Readme ###############################
 #
-####################################################################################
+#   Author:       Tim Siwula
+#   Proposal:     http://bit.ly/2gcCLQ4
+#   Kaggle:       http://bit.ly/2gMVpPG
+#   Github:       http://bit.ly/2gZoTwy
+#   Data:         http://bit.ly/2fQ0LHW
+#
+##################################################################
 
 ########################### Notes ################################
 # clear workspace ----> rm(list = ls())
 #
 ####################################################################################
 
-########################### Setup ################################
----
-output: pdf_document
----
-```{R}
-library(knitr)
-library(markdown)
-#transform the .Rmd to a markdown (.md) file.
-knit('tims_script.Rmd')
-```
-####################################################################################
-
-
 ########################### SET UP DATABASE CONNECTION ################################
 ```{R}
+# SET UP DATABASE CONNECTION
 require("RPostgreSQL")    #install.packages("RPostgreSQL")
 driver <- dbDriver("PostgreSQL")   # loads the PostgreSQL driver
 
@@ -41,6 +31,7 @@ dbExistsTable(connection, "clicks_train")
 
 ########################### QUERY THE DATABASE ########################################
 ```{R}
+# QUERY THE DATABASE
 # 1) 
 # try to find features related to ad_id.
 # here we join click_train and promoted-content with ad_id.
@@ -69,8 +60,9 @@ dim(merged_table)
 ```
 ####################################################################################
 
-########################### Create new table -- write new table ########################################
+########################### CREATE AND WRITE NEW TABLE #############################
 ```{R}
+# CREATE AND WRITE NEW TABLE
 dbWriteTable(connection, "merged_table", merged_table, row.names=FALSE)
 
 # look at the new table
@@ -83,16 +75,143 @@ str(new_table)
 ```
 ####################################################################################
 
-##############################################################################
-3) Models and response
-Models to consider:
-Start with the classification problem first - easier problem - start with decision trees, random forests and bagging
-Then switch to regression
+########################### GET 50/50 CLICKED ###########################
+```{R}
+# GET 50/50 CLICKED
+#better:
+#keep all the 1 instances from new_table
+#ones <— new_table$clicked > 0
+# zeros <— sample(new_table where $clicked = 0, 50000, … )
+# create one data frame with zeros then append the ones
+
+ones = new_table[new_table$clicked>0, 50000]
+length(ones)
+length(new_table)
+
+onesVersion2 = ones = subset(new_table, clicked>0)
+dim(onesVersion2)
+
+
+zeros = subset(new_table, clicked < 1)
+#zeros = sample(new_table$clicked<1, 50000)
+dim(zeros)
+
+undersampled_zeros = zeros[sample(nrow(zeros), 50000), ]
+table(undersampled_zeros$clicked)
+table(ones$clicked)
+dim(undersampled_zeros)
+dim(ones)
+names(undersampled_zeros)
+names(ones)
+
+final_dataset<- data.frame(ones, undersampled_zeros )
+final_dataset <- merge(undersampled_zeros, ones, all.x=TRUE, all.y=TRUE)
+dim(final_dataset)
+```
+#########################################################################
+
+########################### CREATE TRAINING AND TEST SET ###########################
+```{R}
+# CREATE TRAINING AND TEST SET
+partition_size = floor(0.80 * nrow(final_dataset)) ## 80% of the sample size
+set.seed(123) ## set the seed to make your partition reproductible
+partition_index <- sample(seq_len(nrow(final_dataset)), size = partition_size)
+local_train_set <- final_dataset[partition_index, ]
+local_test_set <- final_dataset[-partition_index, ]
+
+# LOCAL TEST SET
+dim(local_test_set)
+head(local_test_set, n=5)
+
+# LOCAL TRAIN SET
+dim(local_train_set)
+head(local_train_set, n=5)
+```
+#########################################################################
+
+Random Forests
+--------------
+Random forests build lots of bushy trees, and then average them to reduce the variance.
+
 ```{r}
+#install.packages('randomForest', repos="http://cran.r-project.org")
+require(randomForest)
+set.seed(101)
+dim(final_dataset)
+```
+Lets fit a random forest and see how well it performs. We will use the response `medv`, the median housing value (in \$1K dollars)
+
+```{r}
+attach(local_train_set)
+rf.final_data_set=randomForest(clicked~. -clicked,data=final_dataset,subset=local_train_set)
+rf.final_data_set
+```
+The MSR and % variance explained are based on OOB  or _out-of-bag_ estimates, a very clever device in random forests to get honest error estimates. The model reports that `mtry=4`, which is the number of variables randomly chosen at each split. Since $p=13$ here, we could try all 13 possible values of `mtry`. We will do so, record the results, and make a plot.
+
+```{r}
+oob.err=double(13)
+test.err=double(13)
+for(mtry in 1:13){
+  fit=randomForest(medv~.,data=Boston,subset=train,mtry=mtry,ntree=400)
+  oob.err[mtry]=fit$mse[400]
+  pred=predict(fit,Boston[-train,])
+  test.err[mtry]=with(Boston[-train,],mean((medv-pred)^2))
+  cat(mtry," ")
+}
+matplot(1:mtry,cbind(test.err,oob.err),pch=19,col=c("red","blue"),type="b",ylab="Mean Squared Error")
+legend("topright",legend=c("OOB","Test"),pch=19,col=c("red","blue"))
+```
+
+Not too difficult! Although the test-error curve drops below the OOB curve, these are estimates based on data, and so have their own standard errors (which are typically quite large). Notice that the points at the end with `mtry=13` correspond to bagging.
+
+#TODO
+#remove campagin and adversider id
+#advertiser_id
+campiagn_id
+
+
+# TODO
+# create test set after train set
+# 1) logistic regession glm
+# 2) random forests model
+# get mean test error ----> mean(pred == test_Set$clicked)
+# test predicted vs total using table() gets your true positives etc
+# compare true positives vs all others
+# TP/(TP+FP)
+# 3) then cross validate results
+
+hist(new_table$clicked)
+length(new_table$clicked[new_table$clicked>0])
+
+# skewness library pkg from r called e1071
+#install.packages("e1071")
+library(e1071)
+skewness(new_table$clicked)
+
+
+
+
+# TODO
+# include in presentatinon and plot to show skewness
+
+
+
+new_table[new_table$clicked=0] # only get 50k from the popular class
+?sample
+#same into data frame and then join
+#sample(new_table, 50000, ...)
+#zeros <— sample(new_table, 50000, ...)
+
+
+########################### CREATE DECISION TREE MODEL #############################
+#3) Models and response
+#Models to consider:
+#Start with the classification problem first - easier problem - start with decision trees, random forests and #bagging
+#Then switch to regression
+```{r}
+# CREATE DECISION TREE MODEL
 require(tree)
 str(new_table)
-
-
 hist(new_table$confidence_level)
 hist(new_table$clicked)
 hist(new_table$display_id)
@@ -107,32 +226,18 @@ tree.local.train.c20=tree(confidence20~.-new_table$confidence_level,data=new_tab
 summary(tree.local.train.c20)
 plot(tree.local.train.c20)
 text(tree.local.train.c20,pretty=0)
-
 ```
 ##############################################################################
 
-
-########################### create a training set ###########################################
+########################### Setup ################################
+---
+output: pdf_document
+---
 ```{R}
-# list the structure of mydata
-str(new_table)
-partition_size = floor(0.80 * nrow(new_table)) ## 80% of the sample size
-str(partition_size)
-set.seed(123) ## set the seed to make your partition reproductible
-partition_index <- sample(seq_len(nrow(new_table)), size = partition_size)
-local_train_set <- new_table[partition_index, ]
-local_test_set <- new_table[-partition_index, ]
-
-# list the structure of mydata
-str(local_test_set)
-
-
-
-
-
-
-
-# print first 10 rows of mydata
-#head(mydata, n=10)
+# SETUP
+library(knitr)
+library(markdown)
+#transform the .Rmd to a markdown (.md) file.
+knit('tims_script.Rmd')
 ```
-##############################################################################
+####################################################################################
