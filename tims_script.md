@@ -1,3 +1,13 @@
+########################### Readme ###############################
+#
+#   Author:       Tim Siwula
+#   Proposal:     http://bit.ly/2gcCLQ4
+#   Kaggle:       http://bit.ly/2gMVpPG
+#   Github:       http://bit.ly/2gZoTwy
+#   Data:         http://bit.ly/2fQ0LHW
+#
+##################################################################
+
 ---
 output: pdf_document
 ---
