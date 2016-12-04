@@ -1,0 +1,140 @@
+########################### Readme ###############################
+#
+#   Author:       Tim Siwula
+#   Proposal:     http://bit.ly/2gcCLQ4
+#   Kaggle:       http://bit.ly/2gMVpPG
+#   Github:       http://bit.ly/2gZoTwy
+#   Data:         http://bit.ly/2fQ0LHW
+#
+##################################################################
+
+
+
+########################### Setup ################################
+library(knitr)
+library(markdown)
+library(ISLR)
+library(tree)
+require("RPostgreSQL")    #install.packages("RPostgreSQL")
+require(randomForest)     #install.packages('randomForest', repos="http://cran.r-project.org")
+require(tree)             #install.packages("tree")
+####################################################################################
+
+
+
+########################### SET UP DATABASE CONNECTION ############################
+driver <- dbDriver("PostgreSQL")   # loads the PostgreSQL driver
+# creates a connection to the postgres database
+# note that "con" will be used later in each connection to the database
+connection <- dbConnect(driver, dbname = "clickprediction",
+                        host = "localhost", port = 5432,
+                        user = "admin", password = "admin")
+# confirm the tables are accessible
+dbExistsTable(connection, "clicks_train")  
+##################################################################################
+
+
+########################### QUERY THE DATABASE ##################################
+# 1) 
+# try to find features related to ad_id.
+# here we join click_train and promoted-content with ad_id.
+
+# look at clicks_train first
+getClicksTrain="select * from clicks_train limit 10 "
+clicks_train = dbGetQuery(connection, getClicksTrain)
+clicks_train
+
+# look at promoted_content next
+getPromotedContent="select * from promoted_content limit 10"
+promoted_content = dbGetQuery(connection, getPromotedContent)
+promoted_content
+
+#TODO
+#remove campagin and adversider id
+#advertiser_id
+#campiagn_id
+
+# join click_train and promoted-content with ad_id new table
+# 500k apears to be stable with rstudio.
+join_query = "
+select t.display_id, t.ad_id, t.clicked, d.document_id,
+d.topic_id, d.confidence_level
+from clicks_train t, promoted_content p, documents_topics d
+where t.ad_id = p.ad_id and p.document_id = d.document_id 
+limit 500000;"
+merged_table=dbGetQuery(connection, join_query)
+head(merged_table, 3)
+dim(merged_table)
+####################################################################################
+
+########################### CREATE AND WRITE NEW TABLE #############################
+dbWriteTable(connection, "merged_table", merged_table, row.names=FALSE)
+
+# look at the new table
+getMergedTable="select * from merged_table limit 500000"
+
+new_table = dbGetQuery(connection, getMergedTable)
+
+# list the structure of mydata
+str(new_table)
+####################################################################################
+
+
+########################### CREATE TRAINING AND TEST SET ###########################
+# define partition ratio
+partition_size = floor(0.80 * nrow(final_dataset)) ## 80% of the sample size
+set.seed(123) ## set the seed to make your partition reproductible
+partition_index <- sample(seq_len(nrow(final_dataset)), size = partition_size)
+
+# set training set
+local_train_set <- final_dataset[partition_index, ]
+local_train_set = sample(local_train_set, length(local_train_set))
+
+# set test set
+local_test_set <- final_dataset[-partition_index, ]
+local_test_set = sample(local_test_set, length(local_test_set))
+
+# LOCAL TEST SET
+dim(local_test_set)
+head(local_test_set, n=5)
+
+# LOCAL TRAIN SET
+dim(local_train_set)
+head(local_train_set, n=5)
+#########################################################################
+
+################   FIT REGRESSION TREE TO TRAINING SET     ##############
+# fit on clicked all features excluding clicked using the final dataset
+clicked_tree = tree(clicked~.-clicked,final_dataset)
+summary(clicked_tree)
+plot(clicked_tree)
+text(clicked_tree,pretty=0)
+
+# SEE IF PRUING THE TREE WILL IMPROVE PERFORMANCE
+cv_clicked_tree = cv.tree(clicked_tree)
+plot(cv_clicked_tree$size, cv_clicked_tree$dev, type='b', main="cross-validation default")
+
+
+pruned = prune.tree(clicked_tree, best=5)
+plot(pruned)
+text(pruned,pretty=0)
+
+
+
+# USE UNPRUNED TREE TO MAKE PREDICTIONS ON THE TEST SET
+# IF BETTER ...
+yhat = predict(clicked_tree, newdata = final_dataset[-partition_index, ])
+clicked_test=final_dataset[-partition_index, "clicked"]
+plot(yhat,clicked_test)
+abline(0,1)
+mean((yhat-clicked_test)^2)
+# the test set MSE associated with the regreeesion tree
+# is 0.21
+#########################################################################
+
+
+
+
+
+
+
