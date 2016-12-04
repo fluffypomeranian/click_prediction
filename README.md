@@ -1,13 +1,32 @@
+########################### Readme ###############################
+#
+#   Author:       Tim Siwula
+#   Proposal:     http://bit.ly/2gcCLQ4
+#   Kaggle:       http://bit.ly/2gMVpPG
+#   Github:       http://bit.ly/2gZoTwy
+#   Data:         http://bit.ly/2fQ0LHW
+#
+##################################################################
+
 ---
 output: pdf_document
 ---
+########################### Readme ################################
 #   Tim Siwula
-   https://docs.google.com/document/d/1wjOgT-j9TNjEs1zHis4oPuDpGU3SnQo6uehtbRwml3c/edit?ts=581cd593
-   https://www.kaggle.com/c/outbrain-click-prediction/data
-   https://github.com/tcsiwula/click_prediction
+#   https://docs.google.com/document/d/1wjOgT-j9TNjEs1zHis4oPuDpGU3SnQo6uehtbRwml3c/edit?ts=581cd593
+#   https://www.kaggle.com/c/outbrain-click-prediction/data
+#   https://github.com/tcsiwula/click_prediction
 #
- clear workspace ----> rm(list = ls())
+# clear workspace ----> rm(list = ls())
 #
+####################################################################################
+
+library(knitr)
+library(markdown)
+
+#transform the .Rmd to a markdown (.md) file.
+knit('tims_script.Rmd')
+
 ########################### SET UP DATABASE CONNECTION ################################
 
 ```r
@@ -42,16 +61,16 @@ clicks_train
 
 ```
 ##    display_id  ad_id clicked
-## 1    14167986 190281       1
-## 2    14167986 281177       0
-## 3    14167986 285834       0
-## 4    14167986 473807       0
-## 5    14167987  39896       1
-## 6    14167987 174547       0
-## 7    14167987 196715       0
-## 8    14167987 213436       0
-## 9    14167987 213509       0
-## 10   14167987 232273       0
+## 1           1  42337       0
+## 2           1 139684       0
+## 3           1 144739       1
+## 4           1 156824       0
+## 5           1 279295       0
+## 6           1 296965       0
+## 7           2 125211       0
+## 8           2 156535       0
+## 9           2 169564       0
+## 10          2 308455       1
 ```
 
 ```r
@@ -90,9 +109,9 @@ head(merged_table, 3)
 
 ```
 ##   display_id  ad_id clicked document_id topic_id confidence_level
-## 1   14167988 180923       0     1151028       74       0.09882334
-## 2   14167988 180923       0     1151028       16       0.17285361
-## 3   14168039 526553       0     2436524      197       0.02791654
+## 1          6 180923       0     1151028       74       0.09882334
+## 2          6 180923       0     1151028       16       0.17285361
+## 3         48 180923       0     1151028       74       0.09882334
 ```
 
 ```r
@@ -121,84 +140,176 @@ dbWriteTable(connection, "merged_table", merged_table, row.names=FALSE)
 
 ```r
 # look at the new table
-getMergedTable="select * from merged_table limit 10"
+getMergedTable="select * from merged_table limit 500000"
+
 new_table = dbGetQuery(connection, getMergedTable)
-new_table
+
+# list the structure of mydata
+str(new_table)
 ```
 
 ```
-##    display_id  ad_id clicked document_id topic_id confidence_level
-## 1    13339482 180923       0     1151028       74      0.098823340
-## 2    13339482 180923       0     1151028       16      0.172853612
-## 3    13339490 526553       1     2436524      197      0.027916545
-## 4    13339518 444495       0      737710      291      0.223427652
-## 5    13339520 389774       1     1804537      159      0.008018133
-## 6    13339520 389774       1     1804537      211      0.009418253
-## 7    13339520 389774       1     1804537       16      0.062539061
-## 8    13339520 389774       1     1804537       66      0.088745137
-## 9    13339520 389774       1     1804537      184      0.114324378
-## 10   13339520 389774       1     1804537       97      0.211581768
+## 'data.frame':	500000 obs. of  6 variables:
+##  $ display_id      : int  13339482 13339482 13339490 13339518 13339520 13339520 13339520 13339520 13339520 13339520 ...
+##  $ ad_id           : int  180923 180923 526553 444495 389774 389774 389774 389774 389774 389774 ...
+##  $ clicked         : int  0 0 1 0 1 1 1 1 1 1 ...
+##  $ document_id     : int  1151028 1151028 2436524 737710 1804537 1804537 1804537 1804537 1804537 1804537 ...
+##  $ topic_id        : int  74 16 197 291 159 211 16 66 184 97 ...
+##  $ confidence_level: num  0.09882 0.17285 0.02792 0.22343 0.00802 ...
 ```
 ####################################################################################
+
+##############################################################################
+3) Models and response
+Models to consider:
+Start with the classification problem first - easier problem - start with decision trees, random forests and bagging
+Then switch to regression
+
+```r
+require(tree)
+```
+
+```
+## Loading required package: tree
+```
+
+```r
+str(new_table)
+```
+
+```
+## 'data.frame':	500000 obs. of  6 variables:
+##  $ display_id      : int  13339482 13339482 13339490 13339518 13339520 13339520 13339520 13339520 13339520 13339520 ...
+##  $ ad_id           : int  180923 180923 526553 444495 389774 389774 389774 389774 389774 389774 ...
+##  $ clicked         : int  0 0 1 0 1 1 1 1 1 1 ...
+##  $ document_id     : int  1151028 1151028 2436524 737710 1804537 1804537 1804537 1804537 1804537 1804537 ...
+##  $ topic_id        : int  74 16 197 291 159 211 16 66 184 97 ...
+##  $ confidence_level: num  0.09882 0.17285 0.02792 0.22343 0.00802 ...
+```
+
+```r
+hist(new_table$confidence_level)
+```
+
+![plot of chunk unnamed-chunk-4](figure/unnamed-chunk-4-1.png)
+
+```r
+hist(new_table$clicked)
+```
+
+![plot of chunk unnamed-chunk-4](figure/unnamed-chunk-4-2.png)
+
+```r
+hist(new_table$display_id)
+```
+
+![plot of chunk unnamed-chunk-4](figure/unnamed-chunk-4-3.png)
+
+```r
+hist(new_table$ad_id)
+```
+
+![plot of chunk unnamed-chunk-4](figure/unnamed-chunk-4-4.png)
+
+```r
+hist(new_table$document_id)
+```
+
+![plot of chunk unnamed-chunk-4](figure/unnamed-chunk-4-5.png)
+
+```r
+hist(new_table$topic_id)
+```
+
+![plot of chunk unnamed-chunk-4](figure/unnamed-chunk-4-6.png)
+
+```r
+attach(new_table)
+confidence20=ifelse(new_table$confidence_level>=0.2,"Yes","No")
+str(confidence20)
+```
+
+```
+##  chr [1:500000] "No" "No" "No" "Yes" "No" "No" "No" ...
+```
+
+```r
+new_table=data.frame(new_table, confidence20)
+tree.local.train.c20=tree(confidence20~.-new_table$confidence_level,data=new_table)
+summary(tree.local.train.c20)
+```
+
+```
+## 
+## Classification tree:
+## tree(formula = confidence20 ~ . - new_table$confidence_level, 
+##     data = new_table)
+## Variables actually used in tree construction:
+## [1] "confidence_level"
+## Number of terminal nodes:  2 
+## Residual mean deviance:  0 = 0 / 5e+05 
+## Misclassification error rate: 0 = 0 / 5e+05
+```
+
+```r
+plot(tree.local.train.c20)
+text(tree.local.train.c20,pretty=0)
+```
+
+![plot of chunk unnamed-chunk-4](figure/unnamed-chunk-4-7.png)
+##############################################################################
+
 
 ########################### create a training set ###########################################
 
 ```r
-partition_size = floor(0.80 * nrow(clicks_train)) ## 80% of the sample size
+# list the structure of mydata
+str(new_table)
+```
+
+```
+## 'data.frame':	500000 obs. of  7 variables:
+##  $ display_id      : int  13339482 13339482 13339490 13339518 13339520 13339520 13339520 13339520 13339520 13339520 ...
+##  $ ad_id           : int  180923 180923 526553 444495 389774 389774 389774 389774 389774 389774 ...
+##  $ clicked         : int  0 0 1 0 1 1 1 1 1 1 ...
+##  $ document_id     : int  1151028 1151028 2436524 737710 1804537 1804537 1804537 1804537 1804537 1804537 ...
+##  $ topic_id        : int  74 16 197 291 159 211 16 66 184 97 ...
+##  $ confidence_level: num  0.09882 0.17285 0.02792 0.22343 0.00802 ...
+##  $ confidence20    : Factor w/ 2 levels "No","Yes": 1 1 1 2 1 1 1 1 1 2 ...
+```
+
+```r
+partition_size = floor(0.80 * nrow(new_table)) ## 80% of the sample size
+str(partition_size)
+```
+
+```
+##  num 4e+05
+```
+
+```r
 set.seed(123) ## set the seed to make your partition reproductible
-partition_index <- sample(seq_len(nrow(clicks_train)), size = partition_size)
-local_train_set <- clicks_train[partition_index, ]
-local_test_set <- clicks_train[-partition_index, ]
-dim(local_train_set)
-dim(local_test_set)
-'''
+partition_index <- sample(seq_len(nrow(new_table)), size = partition_size)
+local_train_set <- new_table[partition_index, ]
+local_test_set <- new_table[-partition_index, ]
+
+# list the structure of mydata
+str(local_test_set)
+```
+
+```
+## 'data.frame':	100000 obs. of  7 variables:
+##  $ display_id      : int  13339520 13339520 13339539 13339605 13339805 13339805 13339945 13340028 13340034 13340092 ...
+##  $ ad_id           : int  389774 389774 400648 509131 528174 528174 90197 528174 180923 180923 ...
+##  $ clicked         : int  1 1 0 0 0 0 0 1 0 0 ...
+##  $ document_id     : int  1804537 1804537 1804537 2436524 2442282 2442282 483905 2442282 1151028 1151028 ...
+##  $ topic_id        : int  184 97 66 197 260 124 140 260 16 16 ...
+##  $ confidence_level: num  0.11432 0.21158 0.08875 0.02792 0.00818 ...
+##  $ confidence20    : Factor w/ 2 levels "No","Yes": 1 2 1 1 1 1 1 1 1 1 ...
+```
+
+```r
+# print first 10 rows of mydata
+#head(mydata, n=10)
+```
 ##############################################################################
-
-########################### probability calculation ###########################################
-library(data.table)
-
-# take care , cant be variables with the same name as var or target in dt... 
-#if you have a beter implamentation of this functions,share it pls ^^
-get_probs <- function (dt,var,target,w){
-  p=dt[,sum(get(target))/.N]
-  dt[ ,.( prob=(sum(get(target))+w*p )/(.N+w) ),by=eval(var)]
-}
-DT_fill_NA <- function(DT,replacement=0) {
-  for (j in seq_len(ncol(DT)))
-    set(DT,which(is.na(DT[[j]])),j,replacement)
-}
-super_fread <- function( file , key_var=NULL){
-  dt <- fread(file)
-  if(!is.null(key_var)) setkeyv(dt,c(key_var))
-  return(dt)
-}
-
-#
-clicks_train  <- super_fread( "data/clicks_train.csv", key_var = "ad_id" )
-
-#
-click_prob = clicks_train[,.(sum(clicked)/.N)]
-ad_id_probs   <- get_probs(clicks_train,"ad_id","clicked",8)
-#dim(ad_id_probs)
-rm(clicks_train)
-gc()
-
-clicks_test   <- super_fread( "data/clicks_test.csv" , key_var = "ad_id" )
-clicks_test <- merge( clicks_test, ad_id_probs, all.x = T )
-
-DT_fill_NA( clicks_test, click_prob )
-
-setkey(clicks_test,"prob")
-submission <- clicks_test[,.(ad_id=paste(rev(ad_id),collapse=" ")),by=display_id]
-setkey(submission,"display_id")
-
-write.csv(submission,file = "submission.csv",row.names = F)
-############################################################################
-```
-
-```
-## Error: <text>:8:3: unexpected INCOMPLETE_STRING
-## 49: write.csv(submission,file = "submission.csv",row.names = F)
-## 50: ############################################################################
-##       ^
-```
