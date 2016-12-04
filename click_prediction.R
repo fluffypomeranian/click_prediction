@@ -18,6 +18,7 @@ library(tree)
 require("RPostgreSQL")    #install.packages("RPostgreSQL")
 require(randomForest)     #install.packages('randomForest', repos="http://cran.r-project.org")
 require(tree)             #install.packages("tree")
+require(knitr)
 ####################################################################################
 
 
@@ -79,7 +80,6 @@ new_table = dbGetQuery(connection, getMergedTable)
 str(new_table)
 ####################################################################################
 
-
 ########################### CREATE TRAINING AND TEST SET ###########################
 # define partition ratio
 partition_size = floor(0.80 * nrow(final_dataset)) ## 80% of the sample size
@@ -128,6 +128,12 @@ clicked_test=final_dataset[-partition_index, "clicked"]
 plot(yhat,clicked_test)
 abline(0,1)
 mean((yhat-clicked_test)^2)
+head(yhat, n=5)
+dim(yhat)
+str(yhat)
+length(yhat)
+summary(yhat)
+attach(yhat)
 # the test set MSE associated with the regreeesion tree
 # is 0.21
 #########################################################################
@@ -135,6 +141,60 @@ mean((yhat-clicked_test)^2)
 
 
 
+################   LOGISTIC REGRESSION    ##############
+summary(final_dataset)
+cor(final_dataset)
 
+
+clicked_model2=glm(clicked~ .,data=clicks_train,family=binomial)
+summary(clicked_model2)
+#accuracy of clicked_model2
+model_pred_prob=predict(clicked_model2, final_dataset[-partition_index,], type = "response")
+
+# predicted ups and downs
+pred_direction=rep("Down", length(model_pred_prob))
+pred_direction[model_pred_prob > 0.5] = "Up"
+
+#confusion matrix --> check accuracy
+table(pred_direction, final_dataset[-partition_index,])
+
+attach(final_dataset)
+training = (floor(length(final_dataset$clicked)*.80))
+testing = !training
+
+length(final_dataset$clicked)
+
+# get a mapping for each display_id --> set{ad_id, ad_id, ...}
+n_occur <- data.frame(table(clicks_train$display_id))
+
+
+
+
+
+
+#########################################################################
+
+
+
+
+
+
+# submission file format
+#
+#"display_id","ad_id"
+#16874594,"170392 172888 162754 150083 66758 180797"
+#16874595,"8846 143982 30609"
+
+
+
+####### SAMPLE SUBMISSION ########
+
+pgsqlCreateSubmissionTableQuery = "create table submission(
+            display_id int,
+ad_id text);"
+
+createSubmissionFile=dbGetQuery(connection, pgsqlCreateSubmissionTableQuery)
+str(submission)
+#########################################################################
 
 
