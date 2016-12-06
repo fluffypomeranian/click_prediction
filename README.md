@@ -10,17 +10,6 @@
 
 ---
 output: pdf_document
----
-########################### Readme ################################
-#   Tim Siwula
-#   https://docs.google.com/document/d/1wjOgT-j9TNjEs1zHis4oPuDpGU3SnQo6uehtbRwml3c/edit?ts=581cd593
-#   https://www.kaggle.com/c/outbrain-click-prediction/data
-#   https://github.com/tcsiwula/click_prediction
-#
-# clear workspace ----> rm(list = ls())
-#
-####################################################################################
-
 library(knitr)
 library(markdown)
 

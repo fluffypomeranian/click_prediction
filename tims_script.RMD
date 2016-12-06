@@ -11,31 +11,53 @@
 ```
 
 ```{R}
-########################### Notes ################################
-# clear workspace ----> rm(list = ls())
+########################### Readme ###############################
 #
-####################################################################################
-```
-```{R}
-########################### SET UP DATABASE CONNECTION ############################
-# SET UP DATABASE CONNECTION
-require("RPostgreSQL")    #install.packages("RPostgreSQL")
-driver <- dbDriver("PostgreSQL")   # loads the PostgreSQL driver
+#   Author:       Tim Siwula
+#   Proposal:     http://bit.ly/2gcCLQ4
+#   Kaggle:       http://bit.ly/2gMVpPG
+#   Github:       http://bit.ly/2gZoTwy
+#   Data:         http://bit.ly/2fQ0LHW
+#
+##################################################################
 
+########################### Setup ################################
+#install.packages("knitr")
+#install.packages("markdown")
+library(knitr)
+library(markdown)
+library(ISLR)
+library(tree)
+require("RPostgreSQL")    #install.packages("RPostgreSQL")
+require(randomForest)     #install.packages('randomForest', repos="http://cran.r-project.org")
+require(tree)             #install.packages("tree")
+require(knitr)
+library(knitr)
+library(markdown)
+#install.packages("e1071", dep = TRUE) # cross validation library
+library(e1071)
+require("e1071")
+#install.packages("ROCR", dep = TRUE) # ROC Curves --> ACCURACY library
+library(ROCR)
+require("ROCR")
+#transform the .Rmd to a markdown (.md) file.
+knit("click_prediction.R")
+
+####################################################################################
+
+########################### SET UP DATABASE CONNECTION ############################
+driver <- dbDriver("PostgreSQL")   # loads the PostgreSQL driver
 # creates a connection to the postgres database
 # note that "con" will be used later in each connection to the database
 connection <- dbConnect(driver, dbname = "clickprediction",
-                 host = "localhost", port = 5432,
-                 user = "admin", password = "admin")
+                        host = "localhost", port = 5432,
+                        user = "admin", password = "admin")
 # confirm the tables are accessible
-dbExistsTable(connection, "clicks_train")  
+dbExistsTable(connection, "clicks_train")
 ##################################################################################
-```
 
-```{R}
 ########################### QUERY THE DATABASE ##################################
-# QUERY THE DATABASE
-# 1) 
+# 1)
 # try to find features related to ad_id.
 # here we join click_train and promoted-content with ad_id.
 
@@ -60,30 +82,32 @@ join_query = "
 select t.display_id, t.ad_id, t.clicked, d.document_id,
 d.topic_id, d.confidence_level
 from clicks_train t, promoted_content p, documents_topics d
-where t.ad_id = p.ad_id and p.document_id = d.document_id 
+where t.ad_id = p.ad_id and p.document_id = d.document_id
 limit 500000;"
 merged_table=dbGetQuery(connection, join_query)
 head(merged_table, 3)
 dim(merged_table)
 ####################################################################################
-```
 
-```{R}
 ########################### CREATE AND WRITE NEW TABLE #############################
-# CREATE AND WRITE NEW TABLE
 dbWriteTable(connection, "merged_table", merged_table, row.names=FALSE)
 
 # look at the new table
 getMergedTable="select * from merged_table limit 500000"
 
-new_table = dbGetQuery(connection, getMergedTable)
+final_dataset = dbGetQuery(connection, getMergedTable)
 
 # list the structure of mydata
 str(new_table)
-####################################################################################
-```
+hist(new_table$confidence_level)
+hist(new_table$clicked)
+hist(new_table$display_id)
+hist(new_table$ad_id)
+hist(new_table$document_id)
+hist(new_table$topic_id)
 
-```{R}
+####################################################################################
+
 ########################### GET 50/50 CLICKED ######################################
 
 ones = new_table[new_table$clicked>0, 50000]
@@ -110,16 +134,20 @@ final_dataset <- merge(undersampled_zeros, ones, all.x=TRUE, all.y=TRUE)
 dim(final_dataset)
 head(final_dataset, n=5)
 ####################################################################################
-```
 
-```{R}
 ########################### CREATE TRAINING AND TEST SET ###########################
-# CREATE TRAINING AND TEST SET
-partition_size = floor(0.80 * nrow(final_dataset)) ## 80% of the sample size
+# define partition ratio
+#partition_size = floor(0.80 * nrow(final_dataset)) ## 80% of the sample size
 set.seed(123) ## set the seed to make your partition reproductible
 partition_index <- sample(seq_len(nrow(final_dataset)), size = partition_size)
+
+# set training set
 local_train_set <- final_dataset[partition_index, ]
+local_train_set = sample(local_train_set, length(local_train_set))
+
+# set test set
 local_test_set <- final_dataset[-partition_index, ]
+local_test_set = sample(local_test_set, length(local_test_set))
 
 # LOCAL TEST SET
 dim(local_test_set)
@@ -129,144 +157,93 @@ head(local_test_set, n=5)
 dim(local_train_set)
 head(local_train_set, n=5)
 #########################################################################
-```
 
-```{R}
-########################### RANDOM FORESTS ###########################
+################   FIT REGRESSION TREE TO TRAINING SET     ##############
+# fit on clicked all features excluding clicked using the final dataset
+clicked_tree = tree(clicked~.-clicked,final_dataset)
+summary(clicked_tree)
+plot(clicked_tree)
+text(clicked_tree,pretty=0)
 
-##########################   INIT       ##############################
-#install.packages('randomForest', repos="http://cran.r-project.org")
-require(randomForest)
-set.seed(101)
-dim(final_dataset)
+# SEE IF PRUING THE TREE WILL IMPROVE PERFORMANCE
+cv_clicked_tree = cv.tree(clicked_tree)
+plot(cv_clicked_tree$size, cv_clicked_tree$dev, type='b', main="cross-validation default")
+
+
+pruned = prune.tree(clicked_tree, best=5)
+plot(pruned)
+text(pruned,pretty=0)
+
+
+
+# USE UNPRUNED TREE TO MAKE PREDICTIONS ON THE TEST SET
+# IF BETTER ...
+yhat = predict(clicked_tree, newdata = final_dataset[-partition_index, ])
+clicked_test=final_dataset[-partition_index, "clicked"]
+plot(yhat,clicked_test)
+abline(0,1)
+mean((yhat-clicked_test)^2)
+head(yhat, n=5)
+str(yhat)
+length(yhat)
+summary(yhat)
+# the test set MSE associated with the regreeesion tree
+# is 0.21
+#########################################################################
+
+
+
+
+################   LOGISTIC REGRESSION    ##############
+summary(final_dataset)
+cor(final_dataset)
+
+
+clicked_model2=glm(clicked~ .,data=clicks_train,family=binomial)
+summary(clicked_model2)
+#accuracy of clicked_model2
+model_pred_prob=predict(clicked_model2, final_dataset[-partition_index,], type = "response")
+
+# predicted ups and downs
+pred_direction=rep("Down", length(model_pred_prob))
+pred_direction[model_pred_prob > 0.5] = "Up"
+
+#confusion matrix --> check accuracy
+table(pred_direction, final_dataset[-partition_index,])
+
 attach(final_dataset)
-#########################################################################
+training = (floor(length(final_dataset$clicked)*.80))
+testing = !training
 
-##########################   FIT W/RESPONSE CLICKED        ##############
-install.packages("tree")
-library(ISLR)
-library(tree)
-attach(final_dataset)
-train=sample(local_train_set, length(local_train_set))
-myTree=tree(clicked~.-clicked,final_dataset)
-summary(myTree)
-plot(myTree)
-text(myTree,pretty=0)
+length(final_dataset$clicked)
 
-
-
-#> set.seed(2) 
-#> train=sample (1: nrow(Carseats), 200) 
-#> Carseats .test=Carseats [-train,] 
-#> High.test=High[-train] > tree.carseats =tree(High∼.-Sales, Carseats ,subset=train) 
-#> tree.pred=predict(tree.carseats ,Carseats .test ,type="class") 
-#> table(tree.pred ,High.test)
-
-
-
-
-#########################################################################
-##########################   FIT REGRESSION TREE TO FINAL_DATA_SET   ##############
-#1 CREATE A TRAINING SET
-# CREATE TRAINING AND TEST SET
-partition_size = floor(0.80 * nrow(final_dataset)) ## 80% of the sample size
-set.seed(123) ## set the seed to make your partition reproductible
-partition_index <- sample(seq_len(nrow(final_dataset)), size = partition_size)
-local_train_set <- final_dataset[partition_index, ]
-local_test_set <- final_dataset[-partition_index, ]
-
-train=sample( 1:nrow(final_dataset), floor(0.80 * nrow(final_dataset) ) )
-
-# LOCAL TEST SET
-dim(local_test_set)
-head(local_test_set, n=5)
-
-# LOCAL TRAIN SET
-dim(local_train_set)
-head(local_train_set, n=5)
-
-#2 FIT TREE TO TRAINING SET
-tree.final=tree(clicked~.,final_dataset,subset=train)
-summary(tree.final)
-plot(tree.final)
-text(tree.final,pretty=0)
-tree.final
+# get a mapping for each display_id --> set{ad_id, ad_id, ...}
+n_occur <- data.frame(table(clicks_train$display_id))
 #########################################################################
 
 
+################   SUPPORT VECTOR MACHINE    ##############
 
+# cross validation library
+# tune() performs 10-fold CV
+####### ROC Curves --> ACCURACY ########
+dat=data.frame(x=clicks_train, y=as.factor(clicked))
+
+
+
+
+
+####### SAMPLE SUBMISSION ########
+# submission file format
+#
+#"display_id","ad_id"
+#16874594,"170392 172888 162754 150083 66758 180797"
+#16874595,"8846 143982 30609"
+# CREATE SQL TABLE
+pgsqlCreateSubmissionTableQuery = "create table submission(
+            display_id int,
+ad_id text);"
+createSubmissionFile=dbGetQuery(connection, pgsqlCreateSubmissionTableQuery)
+str(submission)
 #########################################################################
 ```
-
-
-# TODO
-# create test set after train set
-# 1) logistic regession glm
-# 2) random forests model
-# get mean test error ----> mean(pred == test_Set$clicked)
-# test predicted vs total using table() gets your true positives etc
-# compare true positives vs all others
-# TP/(TP+FP)
-# 3) then cross validate results
-
-hist(new_table$clicked)
-length(new_table$clicked[new_table$clicked>0])
-
-# skewness library pkg from r called e1071
-#install.packages("e1071")
-library(e1071)
-skewness(new_table$clicked)
-
-
-
-
-# TODO
-# include in presentatinon and plot to show skewness
-
-
-
-new_table[new_table$clicked=0] # only get 50k from the popular class
-?sample
-#same into data frame and then join
-#sample(new_table, 50000, ...)
-#zeros <— sample(new_table, 50000, ...)
-
-
-########################### CREATE DECISION TREE MODEL #############################
-#3) Models and response
-#Models to consider:
-#Start with the classification problem first - easier problem - start with decision trees, random forests and #bagging
-#Then switch to regression
-```{r}
-# CREATE DECISION TREE MODEL
-require(tree)
-str(new_table)
-hist(new_table$confidence_level)
-hist(new_table$clicked)
-hist(new_table$display_id)
-hist(new_table$ad_id)
-hist(new_table$document_id)
-hist(new_table$topic_id)
-attach(new_table)
-confidence20=ifelse(new_table$confidence_level>=0.2,"Yes","No")
-str(confidence20)
-new_table=data.frame(new_table, confidence20)
-tree.local.train.c20=tree(confidence20~.-new_table$confidence_level,data=new_table)
-summary(tree.local.train.c20)
-plot(tree.local.train.c20)
-text(tree.local.train.c20,pretty=0)
-```
-##############################################################################
-
-########################### Setup ################################
----
-output: pdf_document
----
-```{R}
-# SETUP
-library(knitr)
-library(markdown)
-#transform the .Rmd to a markdown (.md) file.
-knit('tims_script.Rmd')
-```
-####################################################################################

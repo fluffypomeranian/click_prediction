@@ -8,9 +8,9 @@
 #
 ##################################################################
 
-
-
 ########################### Setup ################################
+#install.packages("knitr")
+#install.packages("markdown")
 library(knitr)
 library(markdown)
 library(ISLR)
@@ -19,6 +19,17 @@ require("RPostgreSQL")    #install.packages("RPostgreSQL")
 require(randomForest)     #install.packages('randomForest', repos="http://cran.r-project.org")
 require(tree)             #install.packages("tree")
 require(knitr)
+library(knitr)
+library(markdown)
+#install.packages("e1071", dep = TRUE) # cross validation library
+library(e1071)
+require("e1071")
+#install.packages("ROCR", dep = TRUE) # ROC Curves --> ACCURACY library
+library(ROCR)
+require("ROCR")
+#transform the .Rmd to a markdown (.md) file.
+knit("click_prediction.R")
+
 ####################################################################################
 
 
@@ -31,12 +42,12 @@ connection <- dbConnect(driver, dbname = "clickprediction",
                         host = "localhost", port = 5432,
                         user = "admin", password = "admin")
 # confirm the tables are accessible
-dbExistsTable(connection, "clicks_train")  
+dbExistsTable(connection, "clicks_train")
 ##################################################################################
 
 
 ########################### QUERY THE DATABASE ##################################
-# 1) 
+# 1)
 # try to find features related to ad_id.
 # here we join click_train and promoted-content with ad_id.
 
@@ -61,7 +72,7 @@ join_query = "
 select t.display_id, t.ad_id, t.clicked, d.document_id,
 d.topic_id, d.confidence_level
 from clicks_train t, promoted_content p, documents_topics d
-where t.ad_id = p.ad_id and p.document_id = d.document_id 
+where t.ad_id = p.ad_id and p.document_id = d.document_id
 limit 500000;"
 merged_table=dbGetQuery(connection, join_query)
 head(merged_table, 3)
@@ -78,6 +89,40 @@ new_table = dbGetQuery(connection, getMergedTable)
 
 # list the structure of mydata
 str(new_table)
+hist(new_table$confidence_level)
+hist(new_table$clicked)
+hist(new_table$display_id)
+hist(new_table$ad_id)
+hist(new_table$document_id)
+hist(new_table$topic_id)
+
+####################################################################################
+
+########################### GET 50/50 CLICKED ######################################
+
+ones = new_table[new_table$clicked>0, 50000]
+length(ones)
+length(new_table)
+
+onesVersion2 = ones = subset(new_table, clicked>0)
+dim(onesVersion2)
+
+zeros = subset(new_table, clicked < 1)
+dim(zeros)
+
+undersampled_zeros = zeros[sample(nrow(zeros), 50000), ]
+table(undersampled_zeros$clicked)
+table(ones$clicked)
+dim(undersampled_zeros)
+dim(ones)
+names(undersampled_zeros)
+names(ones)
+
+final_dataset <- merge(undersampled_zeros, ones, all.x=TRUE, all.y=TRUE)
+
+# FINAL DATA SET
+dim(final_dataset)
+head(final_dataset, n=5)
 ####################################################################################
 
 ########################### CREATE TRAINING AND TEST SET ###########################
@@ -114,12 +159,9 @@ text(clicked_tree,pretty=0)
 cv_clicked_tree = cv.tree(clicked_tree)
 plot(cv_clicked_tree$size, cv_clicked_tree$dev, type='b', main="cross-validation default")
 
-
 pruned = prune.tree(clicked_tree, best=5)
 plot(pruned)
 text(pruned,pretty=0)
-
-
 
 # USE UNPRUNED TREE TO MAKE PREDICTIONS ON THE TEST SET
 # IF BETTER ...
@@ -129,72 +171,58 @@ plot(yhat,clicked_test)
 abline(0,1)
 mean((yhat-clicked_test)^2)
 head(yhat, n=5)
-dim(yhat)
 str(yhat)
 length(yhat)
 summary(yhat)
-attach(yhat)
 # the test set MSE associated with the regreeesion tree
 # is 0.21
-#########################################################################
-
-
-
+########################################################
 
 ################   LOGISTIC REGRESSION    ##############
 summary(final_dataset)
 cor(final_dataset)
 
+# regression
+log_reg_fit=glm(clicked~ . -clicked,data=clicks_train,family=binomial)
 
-clicked_model2=glm(clicked~ .,data=clicks_train,family=binomial)
-summary(clicked_model2)
-#accuracy of clicked_model2
-model_pred_prob=predict(clicked_model2, final_dataset[-partition_index,], type = "response")
+#accuracy visuals
+par(mfrow=c(2,2))
+plot(log_reg_fit)
 
-# predicted ups and downs
-pred_direction=rep("Down", length(model_pred_prob))
-pred_direction[model_pred_prob > 0.5] = "Up"
+#accuracy numeric
+summary(log_reg_fit)
+log_reg_fit
+##################################################
 
-#confusion matrix --> check accuracy
-table(pred_direction, final_dataset[-partition_index,])
+################   DATA SKEWNESS    ##############
+my_class = final_dataset$clicked
+# skewness
+plot(skewness(my_class))
 
-attach(final_dataset)
-training = (floor(length(final_dataset$clicked)*.80))
-testing = !training
-
-length(final_dataset$clicked)
-
-# get a mapping for each display_id --> set{ad_id, ad_id, ...}
-n_occur <- data.frame(table(clicks_train$display_id))
+###################################################
 
 
+################   SUPPORT VECTOR MACHINE    ######
+# cross validation library
+# tune() performs 10-fold CV
 
 
+####### ROC Curves --> ACCURACY ########
 
 
-#########################################################################
+#####################################################
 
 
-
-
-
-
+####### SAMPLE SUBMISSION ########
 # submission file format
 #
 #"display_id","ad_id"
 #16874594,"170392 172888 162754 150083 66758 180797"
 #16874595,"8846 143982 30609"
-
-
-
-####### SAMPLE SUBMISSION ########
-
-pgsqlCreateSubmissionTableQuery = "create table submission(
-            display_id int,
-ad_id text);"
-
-createSubmissionFile=dbGetQuery(connection, pgsqlCreateSubmissionTableQuery)
-str(submission)
+# CREATE SQL TABLE
+#pgsqlCreateSubmissionTableQuery = "create table submission(
+#            display_id int,
+#ad_id text);"
+#createSubmissionFile=dbGetQuery(connection, pgsqlCreateSubmissionTableQuery)
+#str(submission)
 #########################################################################
-
-
