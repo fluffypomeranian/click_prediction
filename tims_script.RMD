@@ -224,26 +224,5 @@ n_occur <- data.frame(table(clicks_train$display_id))
 
 ################   SUPPORT VECTOR MACHINE    ##############
 
-# cross validation library
-# tune() performs 10-fold CV
-####### ROC Curves --> ACCURACY ########
-dat=data.frame(x=clicks_train, y=as.factor(clicked))
-
-
-
-
-
-####### SAMPLE SUBMISSION ########
-# submission file format
-#
-#"display_id","ad_id"
-#16874594,"170392 172888 162754 150083 66758 180797"
-#16874595,"8846 143982 30609"
-# CREATE SQL TABLE
-pgsqlCreateSubmissionTableQuery = "create table submission(
-            display_id int,
-ad_id text);"
-createSubmissionFile=dbGetQuery(connection, pgsqlCreateSubmissionTableQuery)
-str(submission)
 #########################################################################
 ```
