@@ -6,6 +6,13 @@
 #   Github:       http://bit.ly/2gZoTwy
 #   Data:         http://bit.ly/2fQ0LHW
 #
+# predictors:
+#           "display_id", "ad_id", "clicked", "document_id", "topic_id", "confidence_level"
+#
+# response:
+#         "clicked"
+#
+# future features: entity_id, entity_conf
 ##################################################################
 
 ########################### Setup ################################
@@ -56,9 +63,9 @@ promoted_content
 # 500k apears to be stable with rstudio.
 join_query = "
 select t.display_id, t.ad_id, t.clicked, d.document_id,
-d.topic_id, d.confidence_level
+d.topic_id, d.confidence_level, p.advertiser_id
 from clicks_train t, promoted_content p, documents_topics d
-where t.ad_id = p.ad_id and p.document_id = d.document_id
+where t.ad_id = p.ad_id and p.document_id = d.document_id 
 limit 500000;"
 merged_table=dbGetQuery(connection, join_query)
 head(merged_table, 3)
@@ -84,7 +91,7 @@ hist(new_table$topic_id)
 ####################################################################################
 
 ########################### GET 50/50 CLICKED ######################################
-
+# balanced data set
 ones = new_table[new_table$clicked>0, 50000]
 length(ones)
 length(new_table)
@@ -110,6 +117,10 @@ dim(final_dataset)
 head(final_dataset, n=5)
 ####################################################################################
 
+################   DATA SKEWNESS    ##############
+my_class = final_dataset$clicked
+###################################################
+
 ########################### CREATE TRAINING AND TEST SET ###########################
 # define partition ratio
 partition_size = floor(0.80 * nrow(final_dataset)) ## 80% of the sample size
@@ -132,6 +143,77 @@ head(local_test_set, n=5)
 dim(local_train_set)
 head(local_train_set, n=5)
 #########################################################################
+
+################   MODEL COMPARISON    ##############
+###################################################
+# model 1:
+# type: glm
+# predictors: topic_id, coconfidence_leve
+# accuracy: 61%
+###################################################
+m1_fit=glm(clicked ~ topic_id+confidence_level, data=train,family=binomial)
+summary(m1_fit)
+m1_probs=predict(m1_fit,newdata=test,type="response") 
+m1=ifelse(m1_probs >0.5,1,0)
+table(m1,test$clicked)
+acu1=mean(m1==test$clicked)     # numberic accuracy
+acu1
+###################################################
+
+###################################################
+# model 2:
+# type: glm
+# predictors: topic_id, coconfidence_levelnf, document_id, topic_id
+# accuracy: 62%
+###################################################
+m2_fit=glm(clicked ~ topic_id+confidence_level+document_id+topic_id, data=train,family=binomial)
+summary(m2_fit)
+m2_probs=predict(m2_fit,newdata=test,type="response") 
+m2=ifelse(m2_probs >0.5,1,0)
+table(m2,test$clicked)
+acu2=mean(m2==test$clicked)      # numberic accuracy
+acu2
+###################################################
+
+###################################################
+# model 3:
+# type: random forest
+# predictors: topic_id, coconfidence_level
+# accuracy: 69%
+###################################################
+m3_fit=randomForest(clicked ~ topic_id+confidence_level, data=train, ntree=400)
+m3_probs=predict(m3_fit,test)
+m3=ifelse(m3_probs >0.5,1,0)
+table(m3, test$clicked)
+acu3 = mean(m3 == test$clicked)     # numberic accuracy
+acu3
+###################################################
+
+####### PLOT ACCURACY RESULTS GRAPH ########
+x_models <- numeric(0)
+x_models[1] =  "m1"
+x_models[2] =  "m2"
+x_models[3] =  "m3"
+
+y_accuracy = numeric(0)
+y_accuracy[1] =  acu1
+y_accuracy[2] =  acu2
+y_accuracy[3] =  acu3
+colours <- c("blue", "yellow", "green")
+acu_all <- c(acu1, acu2, acu3)
+barplot(col=colours,acu_all, main="Accuracy Comparison", xlab="Models", ylab="Accuracy", names.arg=c("m1","m2","m3"),
+        border="red")
+################################################
+
+####### FUTURE FEATURES ########
+# create another model with different features
+#m1 : glm with topic_id, conf
+#m2: rf with topic_id, conf
+#m3: glm with topic_id, conf, category_id, category_conf  
+#m4: topics_id+confidence_level+advertiser_id
+#models:       #x-axis: m1, m2
+#accuracy:    #y-axis: 0.60, 0.69
+################################################
 
 ################                 DECISION TREE             ##############
 # fit on clicked all features excluding clicked using the final dataset
@@ -166,9 +248,31 @@ summary(yhat)
 ################   LOGISTIC REGRESSION    ##############
 summary(final_dataset)
 cor(final_dataset)
+partition_size = floor(0.80 * nrow(final_dataset)) ## 80% of the sample size
+
+# remove empty values
+is.na(final_dataset) # if TRUE, then replace them with 0
+final_dataset[is.na(final_dataset)] <- 0 # Not sure replacing NA with 0 will have effect on your model
+#train=sample(1:nrow(final_dataset),partition_size)
+
+partition_size <- floor(0.75 * nrow(final_dataset))
+set.seed(123)
+
+train_ind <- sample(seq_len(nrow(final_dataset)), size = partition_size)
+train <- final_dataset[train_ind, ]
+test <- final_dataset[-train_ind, ]
 
 # regression
-log_reg_fit=glm(clicked~ . -clicked,data=clicks_train,family=binomial)
+#log_reg_fit=glm(clicked~ . -clicked,data=final_dataset, subset = train,family=binomial)
+log_reg_fit=glm(clicked ~ topic_id+confidence_level, data=train,family=binomial)
+summary(log_reg_fit)
+
+glm.probs=predict(log_reg_fit,newdata=test,type="response") 
+glm.pred=ifelse(glm.probs >0.5,1,0)
+
+#accuracy numberic
+table(glm.pred,test$clicked)
+mean(glm.pred==test$clicked)
 
 #accuracy visuals
 par(mfrow=c(2,2))
@@ -180,41 +284,20 @@ log_reg_fit
 ##################################################
 
 ################   RANDOM FORESTS    ##############
-rf=randomForest(clicked~.,data=Boston,subset=train)
+#train=sample(1:nrow(final_dataset),300)
+#rf=randomForest(clicked~.-clicked,data=final_dataset,subset=train)
+#test.err=with(test[-train,],mean((medv-pred)^2))
 
+rf=randomForest(clicked ~ topic_id+confidence_level, data=train, ntree=400)
+rf.probs=predict(rf,test)
+rf.pred=ifelse(rf.probs >0.5,1,0)
+# this models accuracy
+table(rf.pred, test$clicked)
+mean(rf.pred == test$clicked)
 ###################################################
 
-
-
-################   DATA SKEWNESS    ##############
-my_class = final_dataset$clicked
-# skewness
-plot(skewness(my_class))
-
-###################################################
-
-
-################   SUPPORT VECTOR MACHINE    ######
-# cross validation library
-# tune() performs 10-fold CV
-
-
-####### ROC Curves --> ACCURACY ########
-
-
-#####################################################
-
-
-####### SAMPLE SUBMISSION ########
-# submission file format
-#
+####### KAGGLE SAMPLE SUBMISSION FORMAT ########
 #"display_id","ad_id"
 #16874594,"170392 172888 162754 150083 66758 180797"
 #16874595,"8846 143982 30609"
-# CREATE SQL TABLE
-#pgsqlCreateSubmissionTableQuery = "create table submission(
-#            display_id int,
-#ad_id text);"
-#createSubmissionFile=dbGetQuery(connection, pgsqlCreateSubmissionTableQuery)
-#str(submission)
-#########################################################################
+################################################
