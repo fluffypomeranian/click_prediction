@@ -1,12 +1,13 @@
-########################### Readme ###############################
 #
 #   Author:       Tim Siwula
 #   Proposal:     http://bit.ly/2gcCLQ4
 #   Kaggle:       http://bit.ly/2gMVpPG
 #   Github:       http://bit.ly/2gZoTwy
 #   Data:         http://bit.ly/2fQ0LHW
-#
-##################################################################
+#   
+---
+## Project description
+We are trying to predict the click probability for a given article displayed to a user online. The target variable is if a user clicked or not. We are working on featuring engineering given a multitude of data sets. The target variable name is click_prob.
 
 ---
 output: pdf_document
@@ -38,7 +39,7 @@ dbExistsTable(connection, "clicks_train")  # confirm the tables are accessible
 ########################### QUERY THE DATABASE ########################################
 
 ```r
-# 1) 
+# 1)
 # try to find features related to ad_id.
 # here we join click_train and promoted-content with ad_id.
 
@@ -90,7 +91,7 @@ join_query = "
 select t.display_id, t.ad_id, t.clicked, d.document_id,
 d.topic_id, d.confidence_level
 from clicks_train t, promoted_content p, documents_topics d
-where t.ad_id = p.ad_id and p.document_id = d.document_id 
+where t.ad_id = p.ad_id and p.document_id = d.document_id
 limit 500000;"
 merged_table=dbGetQuery(connection, join_query)
 head(merged_table, 3)
@@ -229,14 +230,14 @@ summary(tree.local.train.c20)
 ```
 
 ```
-## 
+##
 ## Classification tree:
-## tree(formula = confidence20 ~ . - new_table$confidence_level, 
+## tree(formula = confidence20 ~ . - new_table$confidence_level,
 ##     data = new_table)
 ## Variables actually used in tree construction:
 ## [1] "confidence_level"
-## Number of terminal nodes:  2 
-## Residual mean deviance:  0 = 0 / 5e+05 
+## Number of terminal nodes:  2
+## Residual mean deviance:  0 = 0 / 5e+05
 ## Misclassification error rate: 0 = 0 / 5e+05
 ```
 
